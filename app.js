@@ -10,7 +10,7 @@ const firebaseConfig = {
     measurementId: "G-SQCT91S51P"
 };
 
-// Initialize Firebase (Compat)
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const tournamentRef = db.ref('tournament_state');
@@ -34,6 +34,8 @@ let appState = {
     }
 };
 
+let isInitialLoad = true;
+
 // DOM Elements
 const views = {
     setup: document.getElementById('view-setup'),
@@ -48,6 +50,7 @@ const navBtns = {
 
 // Real-time Sync Logic
 function saveState() {
+    if (isInitialLoad) return; // 데이터를 불러오는 중에는 저장하지 않음
     tournamentRef.set(appState);
 }
 
@@ -56,11 +59,10 @@ function startSync() {
         const data = snapshot.val();
         if (data) {
             appState = data;
-            if (appState.initialized) {
-                navBtns.group.disabled = false;
-                navBtns.tournament.disabled = false;
-            }
+            isInitialLoad = false; // 데이터 로드 완료
             restoreUI();
+        } else {
+            isInitialLoad = false; // 데이터가 없는 경우에도 로드 완료로 간주
         }
     });
 }
@@ -74,6 +76,11 @@ function switchView(viewName) {
     views[viewName].classList.remove('hidden');
     views[viewName].classList.add('active');
     navBtns[viewName].classList.add('active');
+    
+    if (appState.initialized) {
+        navBtns.group.disabled = false;
+        navBtns.tournament.disabled = false;
+    }
 }
 
 navBtns.setup.addEventListener('click', () => { switchView('setup'); saveState(); });
@@ -85,12 +92,25 @@ const btnRandom = document.getElementById('btn-distribute-random');
 const bulkNames = document.getElementById('bulk-names');
 const btnStart = document.getElementById('btn-start-tournament');
 
+// Setup input listeners to save even before starting
+function attachSetupListeners() {
+    const groupIds = ['A', 'B', 'C', 'D'];
+    groupIds.forEach(gId => {
+        const inputs = document.querySelectorAll(`#slots-${gId} input`);
+        inputs.forEach((input, i) => {
+            input.addEventListener('input', () => {
+                if (!appState.groups[gId]) appState.groups[gId] = [];
+                appState.groups[gId][i] = input.value.trim();
+                saveState();
+            });
+        });
+    });
+}
+
 btnRandom.addEventListener('click', () => {
     let namesText = bulkNames.value.trim();
     let names = namesText.split('\n').map(n => n.trim()).filter(n => n);
-    if (names.length < 20) {
-        for (let i = names.length; i < 20; i++) names.push(`Player ${i + 1}`);
-    }
+    while (names.length < 20) names.push(`Player ${names.length + 1}`);
     names = names.slice(0, 20);
     names.sort(() => Math.random() - 0.5);
 
@@ -98,8 +118,12 @@ btnRandom.addEventListener('click', () => {
     let nIdx = 0;
     groupIds.forEach(gId => {
         const inputs = document.querySelectorAll(`#slots-${gId} input`);
-        inputs.forEach(input => { input.value = names[nIdx++]; });
+        inputs.forEach((input, i) => {
+            input.value = names[nIdx++];
+            appState.groups[gId][i] = input.value;
+        });
     });
+    saveState();
 });
 
 btnStart.addEventListener('click', () => {
@@ -108,15 +132,12 @@ btnStart.addEventListener('click', () => {
         appState.groups[gId] = [];
         const inputs = document.querySelectorAll(`#slots-${gId} input`);
         inputs.forEach(input => {
-            let val = input.value.trim() || '언노운';
-            appState.groups[gId].push(val);
+            appState.groups[gId].push(input.value.trim() || '언노운');
         });
     });
 
     appState.initialized = true;
     initMatchesAndStandings();
-    
-    navBtns.group.disabled = false;
     switchView('group');
     renderGroupStage('A');
     saveState();
@@ -149,22 +170,23 @@ function renderGroupStage(gId) {
     const mContainer = document.getElementById('matches-container');
     mContainer.innerHTML = '';
     
-    appState.matches[gId].forEach((m) => {
-        const mEl = document.createElement('div');
-        mEl.className = 'match-item';
-        mEl.innerHTML = `
-            <div class="match-team name-editable" data-idx="${m.t1Idx}">${m.t1Name}</div>
-            <div class="match-score">
-                <input type="number" min="0" data-matchid="${m.id}" data-team="1" value="${m.s1 !== null ? m.s1 : ''}">
-                <span>:</span>
-                <input type="number" min="0" data-matchid="${m.id}" data-team="2" value="${m.s2 !== null ? m.s2 : ''}">
-            </div>
-            <div class="match-team name-editable" data-idx="${m.t2Idx}">${m.t2Name}</div>
-        `;
-        mContainer.appendChild(mEl);
-    });
+    if (appState.matches[gId]) {
+        appState.matches[gId].forEach((m) => {
+            const mEl = document.createElement('div');
+            mEl.className = 'match-item';
+            mEl.innerHTML = `
+                <div class="match-team name-editable" data-idx="${m.t1Idx}">${m.t1Name}</div>
+                <div class="match-score">
+                    <input type="number" min="0" data-matchid="${m.id}" data-team="1" value="${m.s1 !== null ? m.s1 : ''}">
+                    <span>:</span>
+                    <input type="number" min="0" data-matchid="${m.id}" data-team="2" value="${m.s2 !== null ? m.s2 : ''}">
+                </div>
+                <div class="match-team name-editable" data-idx="${m.t2Idx}">${m.t2Name}</div>
+            `;
+            mContainer.appendChild(mEl);
+        });
+    }
 
-    // Score listener
     mContainer.querySelectorAll('input').forEach(inp => {
         inp.addEventListener('input', (e) => {
             const matchId = e.target.dataset.matchid;
@@ -174,11 +196,10 @@ function renderGroupStage(gId) {
             if(team === '1') match.s1 = val;
             if(team === '2') match.s2 = val;
             calcStandings(gId);
-            saveState(); // Only save, don't re-render manually, sync will handle it
+            saveState();
         });
     });
 
-    // Name listener
     mContainer.querySelectorAll('.name-editable').forEach(el => {
         el.addEventListener('click', () => {
             const currentName = el.textContent;
@@ -225,16 +246,20 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 function calcStandings(gId) {
+    if (!appState.groups[gId]) return;
     let teams = appState.groups[gId].map(name => ({ name, p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 }));
-    appState.matches[gId].forEach(m => {
-        if(m.s1 !== null && m.s2 !== null) {
-            let t1 = teams[m.t1Idx], t2 = teams[m.t2Idx];
-            t1.p++; t2.p++; t1.gf += m.s1; t1.ga += m.s2; t2.gf += m.s2; t2.ga += m.s1;
-            if(m.s1 > m.s2) { t1.w++; t1.pts += 3; t2.l++; }
-            else if (m.s1 < m.s2) { t2.w++; t2.pts += 3; t1.l++; }
-            else { t1.d++; t1.pts += 1; t2.d++; t2.pts += 1; }
-        }
-    });
+    if (appState.matches[gId]) {
+        appState.matches[gId].forEach(m => {
+            if(m.s1 !== null && m.s2 !== null) {
+                let t1 = teams[m.t1Idx], t2 = teams[m.t2Idx];
+                if (!t1 || !t2) return;
+                t1.p++; t2.p++; t1.gf += m.s1; t1.ga += m.s2; t2.gf += m.s2; t2.ga += m.s1;
+                if(m.s1 > m.s2) { t1.w++; t1.pts += 3; t2.l++; }
+                else if (m.s1 < m.s2) { t2.w++; t2.pts += 3; t1.l++; }
+                else { t1.d++; t1.pts += 1; t2.d++; t2.pts += 1; }
+            }
+        });
+    }
     teams.forEach(t => t.gd = t.gf - t.ga);
     teams.sort((a,b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
     appState.standings[gId] = teams;
@@ -243,22 +268,23 @@ function calcStandings(gId) {
 function renderStandings(gId) {
     const tbody = document.getElementById('standings-tbody');
     tbody.innerHTML = '';
-    appState.standings[gId].forEach((t, i) => {
-        const tr = document.createElement('tr');
-        if(i < 2) tr.classList.add('advance');
-        tr.innerHTML = `<td>${i+1}</td><td class="team-name">${t.name}</td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}</td><td>${t.ga}</td><td>${t.gd > 0 ? '+'+t.gd : t.gd}</td><td><strong>${t.pts}</strong></td>`;
-        tbody.appendChild(tr);
-    });
+    if (appState.standings[gId]) {
+        appState.standings[gId].forEach((t, i) => {
+            const tr = document.createElement('tr');
+            if(i < 2) tr.classList.add('advance');
+            tr.innerHTML = `<td>${i+1}</td><td class="team-name">${t.name}</td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}</td><td>${t.ga}</td><td>${t.gd > 0 ? '+'+t.gd : t.gd}</td><td><strong>${t.pts}</strong></td>`;
+            tbody.appendChild(tr);
+        });
+    }
 }
 
 document.getElementById('btn-complete-group-stage').addEventListener('click', () => {
-    navBtns.tournament.disabled = false;
     switchView('tournament');
     saveState();
 });
 
 function resetAll() {
-    if (confirm('모든 데이터를 초기화하고 처음으로 돌아가시겠습니까?')) {
+    if (confirm('모든 데이터를 초기화?')) {
         tournamentRef.remove();
         location.reload();
     }
@@ -304,7 +330,7 @@ function evalKnockout(mId) {
     teams.forEach(el => el.classList.remove('winner'));
     pso.forEach(el => el.classList.add('hidden'));
 
-    if (data.s1 === '' || data.s2 === '') { updateDownstream(mId, null); return; }
+    if (!data || data.s1 === '' || data.s2 === '') { updateDownstream(mId, null); return; }
 
     const v1 = parseInt(data.s1), v2 = parseInt(data.s2);
     if (v1 === v2) {
@@ -328,41 +354,38 @@ function updateDownstream(mId, winnerName) {
 }
 
 function restoreUI() {
-    // Current View
     if (appState.currentView) {
-        Object.values(views).forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
-        Object.values(navBtns).forEach(b => b.classList.remove('active'));
-        views[appState.currentView].classList.remove('hidden');
-        views[appState.currentView].classList.add('active');
-        navBtns[appState.currentView].classList.add('active');
+        switchView(appState.currentView);
     }
 
-    // Setup slots restore (only if in setup)
-    if (appState.currentView === 'setup') {
-        const groupIds = ['A', 'B', 'C', 'D'];
-        groupIds.forEach(gId => {
-            const inputs = document.querySelectorAll(`#slots-${gId} input`);
+    const groupIds = ['A', 'B', 'C', 'D'];
+    groupIds.forEach(gId => {
+        const inputs = document.querySelectorAll(`#slots-${gId} input`);
+        if (appState.groups[gId]) {
             appState.groups[gId].forEach((name, i) => { if(inputs[i]) inputs[i].value = name; });
-        });
-    }
+        }
+        calcStandings(gId);
+    });
 
     renderGroupStage(appState.currentGroupTab);
     initTournament();
     
-    // Restore Knockout Scores & Eval
     ['qf1', 'qf2', 'qf3', 'qf4', 'sf1', 'sf2', 'final'].forEach(mId => {
         const root = document.getElementById(mId);
         const data = appState.knockout[mId];
-        const main = root.querySelectorAll('.main-score');
-        const pso = root.querySelectorAll('.pso-score');
-        main[0].value = data.s1; main[1].value = data.s2;
-        pso[0].value = data.ps1; pso[1].value = data.ps2;
-        evalKnockout(mId);
+        if (data) {
+            const main = root.querySelectorAll('.main-score');
+            const pso = root.querySelectorAll('.pso-score');
+            main[0].value = data.s1; main[1].value = data.s2;
+            pso[0].value = data.ps1; pso[1].value = data.ps2;
+            evalKnockout(mId);
+        }
     });
 }
 
 // Global Init
 window.addEventListener('load', () => {
+    attachSetupListeners();
     startSync();
     lucide.createIcons();
 });
