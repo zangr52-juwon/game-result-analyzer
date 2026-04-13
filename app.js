@@ -283,8 +283,31 @@ document.getElementById('btn-complete-group-stage').addEventListener('click', ()
     saveState();
 });
 
+function resetScores() {
+    if (!confirm('참가자 명단은 유지하고 모든 경기 점수만 초기화하시겠습니까?')) return;
+    
+    // Reset group matches
+    ['A','B','C','D'].forEach(gId => {
+        if (appState.matches[gId]) {
+            appState.matches[gId].forEach(m => {
+                m.s1 = null;
+                m.s2 = null;
+            });
+            calcStandings(gId);
+        }
+    });
+
+    // Reset knockout
+    for (let key in appState.knockout) {
+        appState.knockout[key] = { s1: '', s2: '', ps1: '', ps2: '', winner: null };
+    }
+
+    saveState();
+    alert('모든 점수가 초기화되었습니다.');
+}
+
 function resetAll() {
-    if (confirm('모든 데이터를 초기화?')) {
+    if (confirm('모든 데이터를 초기화하고 처음으로 돌아가시겠습니까?')) {
         tournamentRef.remove();
         location.reload();
     }
