@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>월드컵 토너먼트 매니저</title>
+    <meta name="description" content="20인 월드컵 토너먼트 조 편성 및 대진표 관리 서비스">
+    
+    <!-- PWA & Mobile -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <!-- Open Graph (Sharing) -->
+    <meta property="og:title" content="월드컵 슈퍼투어 매니저">
+    <meta property="og:description" content="조 편성부터 우승까지, 한눈에 확인하는 대회 관리 도구">
+    <meta property="og:image" content="https://cdn-icons-png.flaticon.com/512/5358/5358603.png">
+    <meta property="og:type" content="website">
+
+    <!-- Google Fonts: Pretendard alternative -->
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-background"></div>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-header">
+            <div class="logo">
+                <i data-lucide="trophy" class="icon-gold"></i>
+                <h1>월드컵 <span>슈퍼투어</span></h1>
+            </div>
+            <nav class="main-nav">
+                <button id="nav-setup" class="nav-btn active">
+                    <i data-lucide="users"></i> 조 편성
+                </button>
+                <button id="nav-group" class="nav-btn" disabled>
+                    <i data-lucide="layout-grid"></i> 조별 리그
+                </button>
+                <button id="nav-tournament" class="nav-btn" disabled>
+                    <i data-lucide="git-merge"></i> 토너먼트
+                </button>
+                <button onclick="resetAll()" class="nav-btn btn-danger-text">
+                    <i data-lucide="rotate-ccw"></i> 초기화
+                </button>
+            </nav>
+        </header>
+
+        <main class="content-wrapper">
+            <!-- ========== VIEW 1: 조 편성 (Setup) ========== -->
+            <section id="view-setup" class="view active">
+                <div class="setup-header">
+                    <h2>참가자 명단 및 조 편성</h2>
+                    <p>20명의 참가자를 A, B, C, D 4개의 조에 배정합니다. 직접 입력하거나 랜덤으로 섞을 수 있습니다.</p>
+                </div>
+
+                <div class="setup-actions card glass">
+                    <div class="paste-area">
+                        <label for="bulk-names">참가자 명단 일괄 입력 (엔터로 구분, 최대 20명)</label>
+                        <textarea id="bulk-names" placeholder="이름을 입력하세요..."></textarea>
+                        <button id="btn-distribute-random" class="btn-primary">
+                            <i data-lucide="shuffle"></i> 명단 랜덤 배정
+                        </button>
+                    </div>
+                </div>
+
+                <div class="groups-grid">
+                    <!-- Group A -->
+                    <div class="group-card card glass">
+                        <div class="group-header bg-accent-1">A조</div>
+                        <div class="group-slots" id="slots-A">
+                            <input type="text" placeholder="A조 1픽">
+                            <input type="text" placeholder="A조 2픽">
+                            <input type="text" placeholder="A조 3픽">
+                            <input type="text" placeholder="A조 4픽">
+                            <input type="text" placeholder="A조 5픽">
+                        </div>
+                    </div>
+                    <!-- Group B -->
+                    <div class="group-card card glass">
+                        <div class="group-header bg-accent-2">B조</div>
+                        <div class="group-slots" id="slots-B">
+                            <input type="text" placeholder="B조 1픽">
+                            <input type="text" placeholder="B조 2픽">
+                            <input type="text" placeholder="B조 3픽">
+                            <input type="text" placeholder="B조 4픽">
+                            <input type="text" placeholder="B조 5픽">
+                        </div>
+                    </div>
+                    <!-- Group C -->
+                    <div class="group-card card glass">
+                        <div class="group-header bg-accent-3">C조</div>
+                        <div class="group-slots" id="slots-C">
+                            <input type="text" placeholder="C조 1픽">
+                            <input type="text" placeholder="C조 2픽">
+                            <input type="text" placeholder="C조 3픽">
+                            <input type="text" placeholder="C조 4픽">
+                            <input type="text" placeholder="C조 5픽">
+                        </div>
+                    </div>
+                    <!-- Group D -->
+                    <div class="group-card card glass">
+                        <div class="group-header bg-accent-4">D조</div>
+                        <div class="group-slots" id="slots-D">
+                            <input type="text" placeholder="D조 1픽">
+                            <input type="text" placeholder="D조 2픽">
+                            <input type="text" placeholder="D조 3픽">
+                            <input type="text" placeholder="D조 4픽">
+                            <input type="text" placeholder="D조 5픽">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="start-action">
+                    <button id="btn-start-tournament" class="btn-large btn-success">
+                        <i data-lucide="play-circle"></i> 대회 시작하기
+                    </button>
+                </div>
+            </section>
+
+            <!-- ========== VIEW 2: 조별 리그 (Group Stage) ========== -->
+            <section id="view-group" class="view hidden">
+                <div class="group-tabs">
+                    <button class="tab-btn active" data-group="A">A조</button>
+                    <button class="tab-btn" data-group="B">B조</button>
+                    <button class="tab-btn" data-group="C">C조</button>
+                    <button class="tab-btn" data-group="D">D조</button>
+                </div>
+
+                <!-- Tab contents will be dynamically injected, but we'll use a single container that updates -->
+                <div class="group-content-layout">
+                    <!-- Left: Matches -->
+                    <div class="matches-panel card glass">
+                        <h3 class="panel-title"><span id="current-group-label">A</span>조 경기 일정</h3>
+                        <div class="matches-list" id="matches-container">
+                            <!-- Match items will go here -->
+                        </div>
+                    </div>
+
+                    <!-- Right: Standings -->
+                    <div class="standings-panel card glass">
+                        <h3 class="panel-title">순위표</h3>
+                        <div class="table-responsive">
+                            <table class="standings-table">
+                                <thead>
+                                    <tr>
+                                        <th>순위</th>
+                                        <th>이름</th>
+                                        <th>경기</th>
+                                        <th>승</th>
+                                        <th>무</th>
+                                        <th>패</th>
+                                        <th>득</th>
+                                        <th>실</th>
+                                        <th>득실</th>
+                                        <th>승점</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="standings-tbody">
+                                    <!-- Table rows will go here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="group-actions">
+                            <button id="btn-copy-group-results" class="btn-primary" style="margin-top: 1rem; width: 100%; background-color: #0ea5e9;">
+                                <i data-lucide="copy"></i> 전체 결과 복사하기
+                            </button>
+                            <button id="btn-fill-random-scores" class="btn-primary" style="margin-top: 0.5rem; width: 100%; background-color: #4b5563;">
+                                <i data-lucide="zap"></i> 테스트 점수 자동 입력
+                            </button>
+                            <button id="btn-complete-group-stage" class="btn-primary" style="margin-top: 0.5rem; width: 100%;">
+                                조별 리그 모두 종료 및 토너먼트 진출
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== VIEW 3: 토너먼트 (Knockout) ========== -->
+            <section id="view-tournament" class="view hidden">
+                <div class="bracket-container card glass">
+                    <h2>🏆 승자 토너먼트 (8강) 🏆</h2>
+                    <div class="bracket">
+                        <!-- Quarter Finals -->
+                        <div class="round round-qf">
+                            <div class="round-title">8강</div>
+                            <div class="matchup" id="qf1">
+                                <div class="team top" data-slot="1A"><span>1A: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="2B"><span>2B: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                            <div class="matchup" id="qf2">
+                                <div class="team top" data-slot="1C"><span>1C: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="2D"><span>2D: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                            <div class="matchup" id="qf3">
+                                <div class="team top" data-slot="1B"><span>1B: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="2A"><span>2A: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                            <div class="matchup" id="qf4">
+                                <div class="team top" data-slot="1D"><span>1D: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="2C"><span>2C: -</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                        </div>
+
+                        <!-- Semi Finals -->
+                        <div class="round round-sf">
+                            <div class="round-title">4강</div>
+                            <div class="matchup" id="sf1">
+                                <div class="team top" data-slot="WQF1"><span>승자 QF1</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="WQF2"><span>승자 QF2</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                            <div class="matchup" id="sf2">
+                                <div class="team top" data-slot="WQF3"><span>승자 QF3</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="WQF4"><span>승자 QF4</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                        </div>
+
+                        <!-- Final -->
+                        <div class="round round-final">
+                            <div class="round-title">결승</div>
+                            <div class="matchup final-match" id="final">
+                                <div class="team top" data-slot="WSF1"><span>승자 SF1</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                                <div class="team bottom" data-slot="WSF2"><span>승자 SF2</span> <div class="score-group"><input type="number" min="0" class="score-input main-score"><input type="number" min="0" class="score-input pso-score hidden" title="승부차기"></div></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Champion -->
+                        <div class="round round-champion">
+                            <div class="champion-box">
+                                <i data-lucide="crown" class="icon-gold huge-icon"></i>
+                                <h3>우승</h3>
+                                <div id="champion-name" class="champion-name">?</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

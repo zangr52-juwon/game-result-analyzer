@@ -1,0 +1,16 @@
+{
+  "name": "월드컵 토너먼트 매니저",
+  "short_name": "WC 매니저",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "description": "20인 월드컵 토너먼트 관리 서비스",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/5358/5358603.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
