@@ -15,8 +15,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const tournamentRef = db.ref('tournament_state');
 
-// state
-let appState = {
+// Initial State (Default)
+const getDefaultState = () => ({
     initialized: false,
     groups: { A: [], B: [], C: [], D: [] },
     matches: { A: [], B: [], C: [], D: [] },
@@ -32,62 +32,79 @@ let appState = {
         sf2: { s1: '', s2: '', ps1: '', ps2: '', winner: null },
         final: { s1: '', s2: '', ps1: '', ps2: '', winner: null }
     }
-};
+});
 
+let appState = getDefaultState();
 let isInitialLoad = true;
 let saveTimeout = null;
 
-// DOM Elements
-const views = {
-    setup: document.getElementById('view-setup'),
-    group: document.getElementById('view-group'),
-    tournament: document.getElementById('view-tournament')
-};
-const navBtns = {
-    setup: document.getElementById('nav-setup'),
-    group: document.getElementById('nav-group'),
-    tournament: document.getElementById('nav-tournament')
-};
+// UI Elements
+const views = { setup: document.getElementById('view-setup'), group: document.getElementById('view-group'), tournament: document.getElementById('view-tournament') };
+const navBtns = { setup: document.getElementById('nav-setup'), group: document.getElementById('nav-group'), tournament: document.getElementById('nav-tournament') };
+const statusBadge = document.getElementById('save-status');
 
-// Real-time Sync Logic (Debounced)
+// Helper: UI Status
+function setUIStatus(type, msg) {
+    if (!statusBadge) return;
+    statusBadge.className = 'save-status-badge ' + type;
+    statusBadge.querySelector('.status-text').textContent = msg;
+}
+
+// Logic: Persistence
 function saveState() {
+    // 1. LocalStorage Backup
+    localStorage.setItem('bals_wc_backup', JSON.stringify(appState));
+
     if (isInitialLoad) return;
+
+    setUIStatus('saving', '동기화 중...');
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
-        tournamentRef.set(appState);
-    }, 200); // 0.2초 딜레이로 잦은 저장을 방지하고 안정성을 높임
+        tournamentRef.set(appState)
+            .then(() => setUIStatus('success', '동기화 완료'))
+            .catch(err => {
+                console.error("Firebase Save Error:", err);
+                setUIStatus('error', '동기화 실패');
+            });
+    }, 500);
 }
 
 function startSync() {
-    tournamentRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            // 내가 입력 중일 때는 전체 덮어쓰기 방지
-            const activeEl = document.activeElement;
-            const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    // 1. 먼저 로컬 데이터가 있으면 즉시 복원 (빠른 로딩 체감)
+    const localBackup = localStorage.getItem('bals_wc_backup');
+    if (localBackup) {
+        appState = JSON.parse(localBackup);
+        restoreUI();
+    }
 
-            // 딥 카피를 통해 참조 끊기 (선택 사항)
-            appState = JSON.parse(JSON.stringify(data));
+    // 2. 서버 데이터 구독
+    tournamentRef.on('value', (snapshot) => {
+        const serverData = snapshot.val();
+        
+        if (serverData) {
+            // 서버 데이터가 존재하면 로컬보다 서버를 우선시하여 병합
+            appState = serverData;
             isInitialLoad = false;
             
-            if (isTyping) {
-                // 입력 중일 때는 화면 구조를 다시 그리지 않고 상태만 동기화
-                syncStandingsOnly();
+            const activeEl = document.activeElement;
+            const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+            
+            if (isTyping && appState.currentView === 'group') {
+                calcStandings(appState.currentGroupTab);
+                renderStandings(appState.currentGroupTab);
             } else {
                 restoreUI();
             }
+            setUIStatus('success', '동기화 완료');
         } else {
+            // 서버에 데이터가 아예 없는 경우 (완전 초기 상태)
             isInitialLoad = false;
+            setUIStatus('success', '신규 대회 생성 가능');
         }
     });
 }
 
-function syncStandingsOnly() {
-    calcStandings(appState.currentGroupTab);
-    renderStandings(appState.currentGroupTab);
-}
-
-// Navigation Logic
+// Logic: Navigation
 function switchView(viewName) {
     appState.currentView = viewName;
     Object.values(views).forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
@@ -107,7 +124,7 @@ navBtns.setup.addEventListener('click', () => { switchView('setup'); saveState()
 navBtns.group.addEventListener('click', () => { switchView('group'); saveState(); });
 navBtns.tournament.addEventListener('click', () => { switchView('tournament'); saveState(); });
 
-// Setup View Logic
+// Logic: Setup
 const btnRandom = document.getElementById('btn-distribute-random');
 const bulkNames = document.getElementById('bulk-names');
 const btnStart = document.getElementById('btn-start-tournament');
@@ -168,16 +185,15 @@ function initMatchesAndStandings() {
 
     groupIds.forEach(gId => {
         appState.matches[gId] = matchupsIndices.map((pair, idx) => ({
-            id: `m_${gId}_${idx}`,
-            t1Idx: pair[0], t2Idx: pair[1],
-            t1Name: appState.groups[gId][pair[0]],
-            t2Name: appState.groups[gId][pair[1]],
+            id: `m_${gId}_${idx}`, t1Idx: pair[0], t2Idx: pair[1],
+            t1Name: appState.groups[gId][pair[0]], t2Name: appState.groups[gId][pair[1]],
             s1: null, s2: null
         }));
         calcStandings(gId);
     });
 }
 
+// Logic: Group Stage
 function renderGroupStage(gId) {
     appState.currentGroupTab = gId;
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -232,6 +248,7 @@ function renderGroupStage(gId) {
                     if (match.t2Idx === idx) match.t2Name = newName.trim();
                 });
                 saveState();
+                restoreUI();
             }
         });
     });
@@ -242,23 +259,10 @@ function renderGroupStage(gId) {
 document.getElementById('btn-fill-random-scores').addEventListener('click', () => {
     const gId = appState.currentGroupTab;
     if (!appState.matches[gId]) return;
-    
-    appState.matches[gId].forEach(m => {
-        m.s1 = Math.floor(Math.random() * 5);
-        m.s2 = Math.floor(Math.random() * 5);
-    });
-    
+    appState.matches[gId].forEach(m => { m.s1 = Math.floor(Math.random() * 5); m.s2 = Math.floor(Math.random() * 5); });
     calcStandings(gId);
-    renderGroupStage(gId); // 서버 응답 전 화면에 즉시 표시
+    renderGroupStage(gId);
     saveState();
-});
-
-document.getElementById('btn-copy-group-results').addEventListener('click', () => {
-    let text = `🏆 BALS WORLD CUP 조별 결과 (${appState.currentGroupTab}조)\n\n[순위표]\n`;
-    appState.standings[appState.currentGroupTab].forEach((t, i) => {
-        text += `${i+1}위: ${t.name} (${t.pts}점)\n`;
-    });
-    navigator.clipboard.writeText(text).then(() => alert('결과 복사 완료!'));
 });
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -291,6 +295,7 @@ function calcStandings(gId) {
 
 function renderStandings(gId) {
     const tbody = document.getElementById('standings-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     if (appState.standings[gId]) {
         appState.standings[gId].forEach((t, i) => {
@@ -302,26 +307,22 @@ function renderStandings(gId) {
     }
 }
 
-document.getElementById('btn-complete-group-stage').addEventListener('click', () => {
-    switchView('tournament');
-    saveState();
-});
+document.getElementById('btn-complete-group-stage').addEventListener('click', () => { switchView('tournament'); saveState(); });
 
 function resetScores() {
     if (!confirm('참가자 명단은 유지하고 점수만 초기화?')) return;
     ['A','B','C','D'].forEach(gId => {
-        if (appState.matches[gId]) {
-            appState.matches[gId].forEach(m => { m.s1 = null; m.s2 = null; });
-            calcStandings(gId);
-        }
+        if (appState.matches[gId]) { appState.matches[gId].forEach(m => { m.s1 = null; m.s2 = null; }); calcStandings(gId); }
     });
     for (let key in appState.knockout) appState.knockout[key] = { s1: '', s2: '', ps1: '', ps2: '', winner: null };
     saveState();
+    restoreUI();
 }
 
 function resetAll() {
     if (confirm('전체 초기화 및 처음으로?')) {
         tournamentRef.remove();
+        localStorage.removeItem('bals_wc_backup');
         location.reload();
     }
 }
@@ -342,6 +343,7 @@ function setBracketSlot(slotCode, name) {
 function attachKnockoutEvents() {
     ['qf1', 'qf2', 'qf3', 'qf4', 'sf1', 'sf2', 'final'].forEach(mId => {
         const root = document.getElementById(mId);
+        if(!root) return;
         root.querySelectorAll('input').forEach(inp => {
             inp.addEventListener('input', () => {
                 const main = root.querySelectorAll('.main-score');
@@ -386,28 +388,25 @@ function evalKnockout(mId) {
 function updateDownstream(mId, winnerName) {
     const map = {qf1:['WQF1','sf1'], qf2:['WQF2','sf1'], qf3:['WQF3','sf2'], qf4:['WQF4','sf2'], sf1:['WSF1','final'], sf2:['WSF2','final']};
     if(map[mId]) { setBracketSlot(map[mId][0], winnerName || '승자'); }
-    if(mId === 'final') document.getElementById('champion-name').textContent = winnerName || '?';
+    if(mId === 'final') {
+        const camp = document.getElementById('champion-name');
+        if(camp) camp.textContent = winnerName || '?';
+    }
 }
 
 function restoreUI() {
-    if (appState.currentView) {
-        switchView(appState.currentView);
-    }
-
+    if (appState.currentView) switchView(appState.currentView);
     const groupIds = ['A', 'B', 'C', 'D'];
     groupIds.forEach(gId => {
         const inputs = document.querySelectorAll(`#slots-${gId} input`);
-        if (appState.groups[gId]) {
-            appState.groups[gId].forEach((name, i) => { if(inputs[i]) inputs[i].value = name; });
-        }
+        if (appState.groups[gId]) appState.groups[gId].forEach((name, i) => { if(inputs[i]) inputs[i].value = name; });
         calcStandings(gId);
     });
-
     renderGroupStage(appState.currentGroupTab);
     initTournament();
-    
     ['qf1', 'qf2', 'qf3', 'qf4', 'sf1', 'sf2', 'final'].forEach(mId => {
         const root = document.getElementById(mId);
+        if(!root) return;
         const data = appState.knockout[mId];
         if (data) {
             const main = root.querySelectorAll('.main-score');

@@ -144,8 +144,38 @@ button:disabled {
     gap: 0.75rem;
 }
 
-.logo h1 { font-size: 1.5rem; }
-.logo span { color: var(--accent-gold); }
+.logo h1 { font-size: 1.5rem; line-height: 1; }
+.logo h1 span { 
+    color: var(--accent-gold); 
+    display: block; 
+    font-size: 0.8rem; 
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+
+.save-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-left: 1rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #94a3b8;
+}
+
+.save-status-badge.saving .status-dot { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; animation: pulse 1s infinite; }
+.save-status-badge.success .status-dot { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.save-status-badge.error .status-dot { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
 
 .main-nav {
     display: flex;
