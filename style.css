@@ -188,6 +188,24 @@ button:disabled {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+#admin-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#admin-actions.hidden {
+    display: none !important;
+}
     font-weight: 600;
     padding: 0.5rem 1rem;
     border-radius: 8px;

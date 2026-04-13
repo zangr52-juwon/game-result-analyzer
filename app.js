@@ -132,6 +132,18 @@ function switchView(viewName) {
     }
 }
 
+// Admin Login Logic
+document.getElementById('btn-admin-login').addEventListener('click', () => {
+    const password = prompt('관리자 비밀번호를 입력하세요:');
+    if (password === 'bals1234') {
+        document.getElementById('admin-actions').classList.remove('hidden');
+        document.getElementById('btn-admin-login').classList.add('hidden');
+        alert('관리자 모드로 전환되었습니다.');
+    } else {
+        alert('비밀번호가 틀렸습니다.');
+    }
+});
+
 navBtns.setup.addEventListener('click', () => { switchView('setup'); saveState(); });
 navBtns.group.addEventListener('click', () => { switchView('group'); saveState(); });
 navBtns.tournament.addEventListener('click', () => { switchView('tournament'); saveState(); });
