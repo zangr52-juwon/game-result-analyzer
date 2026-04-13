@@ -52,40 +52,51 @@ function setUIStatus(type, msg) {
 
 // Logic: Persistence
 function saveState() {
-    // 1. LocalStorage Backup
+    // 1. LocalStorage Backup (Always works offline)
     localStorage.setItem('bals_wc_backup', JSON.stringify(appState));
 
     if (isInitialLoad) return;
 
-    setUIStatus('saving', '동기화 중...');
+    setUIStatus('saving', '서버 저장중...');
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         tournamentRef.set(appState)
             .then(() => setUIStatus('success', '동기화 완료'))
             .catch(err => {
                 console.error("Firebase Save Error:", err);
-                setUIStatus('error', '동기화 실패');
+                const errMsg = err.code === 'PERMISSION_DENIED' ? '권한 거부(규칙 확인!)' : '저장 실패';
+                setUIStatus('error', errMsg);
             });
-    }, 500);
+    }, 100); // 0.1초로 단축하여 즉각 반영
 }
 
 function startSync() {
-    // 1. 먼저 로컬 데이터가 있으면 즉시 복원 (빠른 로딩 체감)
+    // 1. Local Backup Restore
     const localBackup = localStorage.getItem('bals_wc_backup');
     if (localBackup) {
-        appState = JSON.parse(localBackup);
-        restoreUI();
+        try {
+            appState = JSON.parse(localBackup);
+            restoreUI();
+        } catch(e) { console.error("Backup Restore Error", e); }
     }
 
-    // 2. 서버 데이터 구독
+    // 2. Connection Monitor
+    db.ref(".info/connected").on("value", (snap) => {
+        if (snap.val() === true) {
+            console.log("Firebase Connected");
+        } else {
+            console.warn("Firebase Disconnected");
+            if (!isInitialLoad) setUIStatus('error', '연결 끊김 (오프라인)');
+        }
+    });
+
+    // 3. Server Data Sync
     tournamentRef.on('value', (snapshot) => {
         const serverData = snapshot.val();
+        isInitialLoad = false;
         
         if (serverData) {
-            // 서버 데이터가 존재하면 로컬보다 서버를 우선시하여 병합
             appState = serverData;
-            isInitialLoad = false;
-            
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
             
@@ -97,10 +108,11 @@ function startSync() {
             }
             setUIStatus('success', '동기화 완료');
         } else {
-            // 서버에 데이터가 아예 없는 경우 (완전 초기 상태)
-            isInitialLoad = false;
-            setUIStatus('success', '신규 대회 생성 가능');
+            setUIStatus('success', '서버 데이터 없음 (신규)');
         }
+    }, (err) => {
+        console.error("Firebase Read Error:", err);
+        setUIStatus('error', '불러오기 실패 (규칙 확인)');
     });
 }
 
