@@ -11,7 +11,9 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.database();
 const tournamentRef = db.ref('tournament_state');
 
@@ -38,16 +40,21 @@ let appState = getDefaultState();
 let isInitialLoad = true;
 let saveTimeout = null;
 
-// UI Elements
-const views = { setup: document.getElementById('view-setup'), group: document.getElementById('view-group'), tournament: document.getElementById('view-tournament') };
-const navBtns = { setup: document.getElementById('nav-setup'), group: document.getElementById('nav-group'), tournament: document.getElementById('nav-tournament') };
-const statusBadge = document.getElementById('save-status');
+// UI Elements (Lazy loaded after DOM ready)
+let views, navBtns, statusBadge;
+
+function initDOMElements() {
+    views = { setup: document.getElementById('view-setup'), group: document.getElementById('view-group'), tournament: document.getElementById('view-tournament') };
+    navBtns = { setup: document.getElementById('nav-setup'), group: document.getElementById('nav-group'), tournament: document.getElementById('nav-tournament') };
+    statusBadge = document.getElementById('save-status');
+}
 
 // Helper: UI Status
 function setUIStatus(type, msg) {
     if (!statusBadge) return;
     statusBadge.className = 'save-status-badge ' + type;
-    statusBadge.querySelector('.status-text').textContent = msg;
+    const textEl = statusBadge.querySelector('.status-text');
+    if (textEl) textEl.textContent = msg;
 }
 
 // Logic: Persistence
@@ -64,24 +71,14 @@ function saveState() {
             .then(() => setUIStatus('success', '동기화 완료'))
             .catch(err => {
                 console.error("Firebase Save Error:", err);
-                const errMsg = err.code === 'PERMISSION_DENIED' ? '권한 거부(규칙 확인!)' : '저장 실패';
+                const errMsg = err.code === 'PERMISSION_DENIED' ? '권한 거부' : '저장 실패';
                 setUIStatus('error', errMsg);
             });
     }, 100);
 }
 
 function startSync() {
-    // 1. Connection Monitor
-    db.ref(".info/connected").on("value", (snap) => {
-        if (snap.val() === true) {
-            console.log("Firebase Connected");
-        } else {
-            console.warn("Firebase Disconnected");
-            if (!isInitialLoad) setUIStatus('error', '연결 끊김 (오프라인)');
-        }
-    });
-
-    // 2. Server Data Sync
+    // Server Data Sync
     tournamentRef.on('value', (snapshot) => {
         const serverData = snapshot.val();
         
@@ -118,6 +115,7 @@ function startSync() {
 
 // Logic: Navigation
 function switchView(viewName) {
+    if (!views[viewName]) return;
     appState.currentView = viewName;
     Object.values(views).forEach(v => { v.classList.add('hidden'); v.classList.remove('active'); });
     Object.values(navBtns).forEach(b => b.classList.remove('active'));
@@ -132,15 +130,7 @@ function switchView(viewName) {
     }
 }
 
-navBtns.setup.addEventListener('click', () => { switchView('setup'); saveState(); });
-navBtns.group.addEventListener('click', () => { switchView('group'); saveState(); });
-navBtns.tournament.addEventListener('click', () => { switchView('tournament'); saveState(); });
-
 // Logic: Setup
-const btnRandom = document.getElementById('btn-distribute-random');
-const bulkNames = document.getElementById('bulk-names');
-const btnStart = document.getElementById('btn-start-tournament');
-
 function attachSetupListeners() {
     const groupIds = ['A', 'B', 'C', 'D'];
     groupIds.forEach(gId => {
@@ -154,42 +144,6 @@ function attachSetupListeners() {
         });
     });
 }
-
-btnRandom.addEventListener('click', () => {
-    let namesText = bulkNames.value.trim();
-    let names = namesText.split('\n').map(n => n.trim()).filter(n => n);
-    while (names.length < 20) names.push(`Player ${names.length + 1}`);
-    names = names.slice(0, 20);
-    names.sort(() => Math.random() - 0.5);
-
-    const groupIds = ['A', 'B', 'C', 'D'];
-    let nIdx = 0;
-    groupIds.forEach(gId => {
-        const inputs = document.querySelectorAll(`#slots-${gId} input`);
-        inputs.forEach((input, i) => {
-            input.value = names[nIdx++];
-            appState.groups[gId][i] = input.value;
-        });
-    });
-    saveState();
-});
-
-btnStart.addEventListener('click', () => {
-    const groupIds = ['A', 'B', 'C', 'D'];
-    groupIds.forEach(gId => {
-        appState.groups[gId] = [];
-        const inputs = document.querySelectorAll(`#slots-${gId} input`);
-        inputs.forEach(input => {
-            appState.groups[gId].push(input.value.trim() || '언노운');
-        });
-    });
-
-    appState.initialized = true;
-    initMatchesAndStandings();
-    switchView('group');
-    renderGroupStage('A');
-    saveState();
-});
 
 function initMatchesAndStandings() {
     const groupIds = ['A', 'B', 'C', 'D'];
@@ -212,7 +166,8 @@ function renderGroupStage(gId) {
         if(btn.dataset.group === gId) btn.classList.add('active');
         else btn.classList.remove('active');
     });
-    document.getElementById('current-group-label').textContent = gId;
+    const label = document.getElementById('current-group-label');
+    if (label) label.textContent = gId;
 
     const mContainer = document.getElementById('matches-container');
     if (!mContainer) return;
@@ -269,23 +224,6 @@ function renderGroupStage(gId) {
     renderStandings(gId);
 }
 
-document.getElementById('btn-fill-random-scores').addEventListener('click', () => {
-    const gId = appState.currentGroupTab;
-    if (!appState.matches[gId]) return;
-    appState.matches[gId].forEach(m => { m.s1 = Math.floor(Math.random() * 5); m.s2 = Math.floor(Math.random() * 5); });
-    calcStandings(gId);
-    renderGroupStage(gId);
-    saveState();
-});
-
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        appState.currentGroupTab = e.target.dataset.group;
-        renderGroupStage(appState.currentGroupTab);
-        saveState();
-    });
-});
-
 function calcStandings(gId) {
     if (!appState.groups[gId]) return;
     let teams = appState.groups[gId].map(name => ({ name, p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 }));
@@ -319,8 +257,6 @@ function renderStandings(gId) {
         });
     }
 }
-
-document.getElementById('btn-complete-group-stage').addEventListener('click', () => { switchView('tournament'); saveState(); });
 
 function resetScores() {
     if (!confirm('참가자 명단은 유지하고 모든 경기 점수를 0으로 초기화하시겠습니까?')) return;
@@ -438,9 +374,47 @@ function restoreUI() {
 
 // Global Init
 window.addEventListener('load', () => {
+    initDOMElements();
     attachSetupListeners();
     startSync();
     
+    // Setup Action Listeners
+    const btnRandom = document.getElementById('btn-distribute-random');
+    const btnStart = document.getElementById('btn-start-tournament');
+    const bulkNames = document.getElementById('bulk-names');
+
+    btnRandom.addEventListener('click', () => {
+        let namesText = bulkNames.value.trim();
+        let names = namesText.split('\n').map(n => n.trim()).filter(n => n);
+        while (names.length < 20) names.push(`Player ${names.length + 1}`);
+        names = names.slice(0, 20);
+        names.sort(() => Math.random() - 0.5);
+
+        ['A', 'B', 'C', 'D'].forEach((gId, gIdx) => {
+            const inputs = document.querySelectorAll(`#slots-${gId} input`);
+            inputs.forEach((input, i) => {
+                input.value = names[gIdx * 5 + i];
+                appState.groups[gId][i] = input.value;
+            });
+        });
+        saveState();
+    });
+
+    btnStart.addEventListener('click', () => {
+        ['A', 'B', 'C', 'D'].forEach(gId => {
+            appState.groups[gId] = [];
+            const inputs = document.querySelectorAll(`#slots-${gId} input`);
+            inputs.forEach(input => {
+                appState.groups[gId].push(input.value.trim() || '언노운');
+            });
+        });
+        appState.initialized = true;
+        initMatchesAndStandings();
+        switchView('group');
+        renderGroupStage('A');
+        saveState();
+    });
+
     const adminLoginBtn = document.getElementById('btn-admin-login');
     if (adminLoginBtn) {
         adminLoginBtn.addEventListener('click', () => {
@@ -454,6 +428,24 @@ window.addEventListener('load', () => {
             }
         });
     }
+
+    // Nav Listeners
+    navBtns.setup.addEventListener('click', () => { switchView('setup'); saveState(); });
+    navBtns.group.addEventListener('click', () => { switchView('group'); saveState(); });
+    navBtns.tournament.addEventListener('click', () => { switchView('tournament'); saveState(); });
+
+    // Group Tab Listeners
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            appState.currentGroupTab = e.target.dataset.group;
+            renderGroupStage(appState.currentGroupTab);
+            saveState();
+        });
+    });
+
+    // Complete Group Stage Listener
+    const btnComplete = document.getElementById('btn-complete-group-stage');
+    if (btnComplete) btnComplete.addEventListener('click', () => { switchView('tournament'); saveState(); });
 
     lucide.createIcons();
 });
