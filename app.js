@@ -322,11 +322,16 @@ function renderStandings(gId) {
 document.getElementById('btn-complete-group-stage').addEventListener('click', () => { switchView('tournament'); saveState(); });
 
 function resetScores() {
-    if (!confirm('참가자 명단은 유지하고 점수만 초기화?')) return;
+    if (!confirm('참가자 명단은 유지하고 모든 경기 점수를 0으로 초기화하시겠습니까?')) return;
     ['A','B','C','D'].forEach(gId => {
-        if (appState.matches[gId]) { appState.matches[gId].forEach(m => { m.s1 = null; m.s2 = null; }); calcStandings(gId); }
+        if (appState.matches[gId]) { 
+            appState.matches[gId].forEach(m => { m.s1 = 0; m.s2 = 0; }); 
+            calcStandings(gId); 
+        }
     });
-    for (let key in appState.knockout) appState.knockout[key] = { s1: '', s2: '', ps1: '', ps2: '', winner: null };
+    for (let key in appState.knockout) {
+        appState.knockout[key] = { s1: '0', s2: '0', ps1: '0', ps2: '0', winner: null };
+    }
     saveState();
     restoreUI();
 }
