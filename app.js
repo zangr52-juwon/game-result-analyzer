@@ -2,6 +2,7 @@
 const firebaseConfig = {
     apiKey: "AIzaSyD-Wz-OUZxqo50pCOBUXsT-wrFefxHJ1nY",
     authDomain: "balsworldcup.firebaseapp.com",
+    databaseURL: "https://balsworldcup-default-rtdb.firebaseio.com",
     projectId: "balsworldcup",
     storageBucket: "balsworldcup.firebasestorage.app",
     messagingSenderId: "775500023105",
