@@ -52,7 +52,7 @@ function setUIStatus(type, msg) {
 
 // Logic: Persistence
 function saveState() {
-    // 1. LocalStorage Backup (Always works offline)
+    // LocalStorage Backup
     localStorage.setItem('bals_wc_backup', JSON.stringify(appState));
 
     if (isInitialLoad) return;
@@ -67,20 +67,11 @@ function saveState() {
                 const errMsg = err.code === 'PERMISSION_DENIED' ? '권한 거부(규칙 확인!)' : '저장 실패';
                 setUIStatus('error', errMsg);
             });
-    }, 100); // 0.1초로 단축하여 즉각 반영
+    }, 100);
 }
 
 function startSync() {
-    // 1. Local Backup Restore
-    const localBackup = localStorage.getItem('bals_wc_backup');
-    if (localBackup) {
-        try {
-            appState = JSON.parse(localBackup);
-            restoreUI();
-        } catch(e) { console.error("Backup Restore Error", e); }
-    }
-
-    // 2. Connection Monitor
+    // 1. Connection Monitor
     db.ref(".info/connected").on("value", (snap) => {
         if (snap.val() === true) {
             console.log("Firebase Connected");
@@ -90,13 +81,14 @@ function startSync() {
         }
     });
 
-    // 3. Server Data Sync
+    // 2. Server Data Sync
     tournamentRef.on('value', (snapshot) => {
         const serverData = snapshot.val();
-        isInitialLoad = false;
         
         if (serverData) {
             appState = serverData;
+            isInitialLoad = false;
+            
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
             
@@ -108,11 +100,19 @@ function startSync() {
             }
             setUIStatus('success', '동기화 완료');
         } else {
-            setUIStatus('success', '서버 데이터 없음 (신규)');
+            // Firebase가 비어있을 때만 로컬 백업 확인
+            const localBackup = localStorage.getItem('bals_wc_backup');
+            if (localBackup && isInitialLoad) {
+                try {
+                    appState = JSON.parse(localBackup);
+                    restoreUI();
+                } catch(e) {}
+            }
+            isInitialLoad = false;
+            setUIStatus('success', '연결됨 (새 대회)');
         }
     }, (err) => {
-        console.error("Firebase Read Error:", err);
-        setUIStatus('error', '불러오기 실패 (규칙 확인)');
+        setUIStatus('error', '불러오기 실패');
     });
 }
 
@@ -126,12 +126,6 @@ function switchView(viewName) {
     views[viewName].classList.add('active');
     navBtns[viewName].classList.add('active');
     
-    if (appState.initialized) {
-        navBtns.group.disabled = false;
-        navBtns.tournament.disabled = false;
-    }
-}
-
     if (appState.initialized) {
         navBtns.group.disabled = false;
         navBtns.tournament.disabled = false;
@@ -221,6 +215,7 @@ function renderGroupStage(gId) {
     document.getElementById('current-group-label').textContent = gId;
 
     const mContainer = document.getElementById('matches-container');
+    if (!mContainer) return;
     mContainer.innerHTML = '';
     
     if (appState.matches[gId]) {
@@ -446,7 +441,6 @@ window.addEventListener('load', () => {
     attachSetupListeners();
     startSync();
     
-    // Admin Login Logic - Moved inside load listener for stability
     const adminLoginBtn = document.getElementById('btn-admin-login');
     if (adminLoginBtn) {
         adminLoginBtn.addEventListener('click', () => {
