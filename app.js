@@ -35,6 +35,7 @@ let appState = {
 };
 
 let isInitialLoad = true;
+let saveTimeout = null;
 
 // DOM Elements
 const views = {
@@ -48,23 +49,42 @@ const navBtns = {
     tournament: document.getElementById('nav-tournament')
 };
 
-// Real-time Sync Logic
+// Real-time Sync Logic (Debounced)
 function saveState() {
-    if (isInitialLoad) return; // 데이터를 불러오는 중에는 저장하지 않음
-    tournamentRef.set(appState);
+    if (isInitialLoad) return;
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        tournamentRef.set(appState);
+    }, 200); // 0.2초 딜레이로 잦은 저장을 방지하고 안정성을 높임
 }
 
 function startSync() {
     tournamentRef.on('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
-            appState = data;
-            isInitialLoad = false; // 데이터 로드 완료
-            restoreUI();
+            // 내가 입력 중일 때는 전체 덮어쓰기 방지
+            const activeEl = document.activeElement;
+            const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+            // 딥 카피를 통해 참조 끊기 (선택 사항)
+            appState = JSON.parse(JSON.stringify(data));
+            isInitialLoad = false;
+            
+            if (isTyping) {
+                // 입력 중일 때는 화면 구조를 다시 그리지 않고 상태만 동기화
+                syncStandingsOnly();
+            } else {
+                restoreUI();
+            }
         } else {
-            isInitialLoad = false; // 데이터가 없는 경우에도 로드 완료로 간주
+            isInitialLoad = false;
         }
     });
+}
+
+function syncStandingsOnly() {
+    calcStandings(appState.currentGroupTab);
+    renderStandings(appState.currentGroupTab);
 }
 
 // Navigation Logic
@@ -92,7 +112,6 @@ const btnRandom = document.getElementById('btn-distribute-random');
 const bulkNames = document.getElementById('bulk-names');
 const btnStart = document.getElementById('btn-start-tournament');
 
-// Setup input listeners to save even before starting
 function attachSetupListeners() {
     const groupIds = ['A', 'B', 'C', 'D'];
     groupIds.forEach(gId => {
@@ -196,6 +215,7 @@ function renderGroupStage(gId) {
             if(team === '1') match.s1 = val;
             if(team === '2') match.s2 = val;
             calcStandings(gId);
+            renderStandings(gId);
             saveState();
         });
     });
@@ -222,8 +242,8 @@ function renderGroupStage(gId) {
 document.getElementById('btn-fill-random-scores').addEventListener('click', () => {
     const gId = appState.currentGroupTab;
     appState.matches[gId].forEach(m => {
-        if(m.s1 === null) m.s1 = Math.floor(Math.random() * 5);
-        if(m.s2 === null) m.s2 = Math.floor(Math.random() * 5);
+        m.s1 = Math.floor(Math.random() * 5);
+        m.s2 = Math.floor(Math.random() * 5);
     });
     calcStandings(gId);
     saveState();
@@ -232,9 +252,9 @@ document.getElementById('btn-fill-random-scores').addEventListener('click', () =
 document.getElementById('btn-copy-group-results').addEventListener('click', () => {
     let text = `🏆 BALS WORLD CUP 조별 결과 (${appState.currentGroupTab}조)\n\n[순위표]\n`;
     appState.standings[appState.currentGroupTab].forEach((t, i) => {
-        text += `${i+1}위: ${t.name} (${t.pts}점 / 득실 ${t.gd})\n`;
+        text += `${i+1}위: ${t.name} (${t.pts}점)\n`;
     });
-    navigator.clipboard.writeText(text).then(() => alert('결과가 복사되었습니다!'));
+    navigator.clipboard.writeText(text).then(() => alert('결과 복사 완료!'));
 });
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -284,30 +304,19 @@ document.getElementById('btn-complete-group-stage').addEventListener('click', ()
 });
 
 function resetScores() {
-    if (!confirm('참가자 명단은 유지하고 모든 경기 점수만 초기화하시겠습니까?')) return;
-    
-    // Reset group matches
+    if (!confirm('참가자 명단은 유지하고 점수만 초기화?')) return;
     ['A','B','C','D'].forEach(gId => {
         if (appState.matches[gId]) {
-            appState.matches[gId].forEach(m => {
-                m.s1 = null;
-                m.s2 = null;
-            });
+            appState.matches[gId].forEach(m => { m.s1 = null; m.s2 = null; });
             calcStandings(gId);
         }
     });
-
-    // Reset knockout
-    for (let key in appState.knockout) {
-        appState.knockout[key] = { s1: '', s2: '', ps1: '', ps2: '', winner: null };
-    }
-
+    for (let key in appState.knockout) appState.knockout[key] = { s1: '', s2: '', ps1: '', ps2: '', winner: null };
     saveState();
-    alert('모든 점수가 초기화되었습니다.');
 }
 
 function resetAll() {
-    if (confirm('모든 데이터를 초기화하고 처음으로 돌아가시겠습니까?')) {
+    if (confirm('전체 초기화 및 처음으로?')) {
         tournamentRef.remove();
         location.reload();
     }
