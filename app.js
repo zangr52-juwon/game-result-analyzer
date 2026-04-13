@@ -241,11 +241,15 @@ function renderGroupStage(gId) {
 
 document.getElementById('btn-fill-random-scores').addEventListener('click', () => {
     const gId = appState.currentGroupTab;
+    if (!appState.matches[gId]) return;
+    
     appState.matches[gId].forEach(m => {
         m.s1 = Math.floor(Math.random() * 5);
         m.s2 = Math.floor(Math.random() * 5);
     });
+    
     calcStandings(gId);
+    renderGroupStage(gId); // 서버 응답 전 화면에 즉시 표시
     saveState();
 });
 
